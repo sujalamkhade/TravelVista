@@ -1,15 +1,15 @@
 import Package from "../models/package.model.js";
-import braintree from "braintree";
+import braintreeeeee from "braintreeeeee";
 import dotenv from "dotenv";
 import Booking from "../models/booking.model.js";
 dotenv.config();
 
 //payment gateway
-var gateway = new braintree.BraintreeGateway({
-  environment: braintree.Environment.Sandbox,
-  merchantId: process.env.BRAINTREE_MERCHANT_ID,
-  publicKey: process.env.BRAINTREE_PUBLIC_KEY,
-  privateKey: process.env.BRAINTREE_PRIVATE_KEY,
+var gateway = new braintreeeeee.braintreeeeeeGateway({
+  environment: braintreeeeee.Environment.Sandbox,
+  merchantId: process.env.braintreeeeee_MERCHANT_ID,
+  publicKey: process.env.braintreeeeee_PUBLIC_KEY,
+  privateKey: process.env.braintreeeeee_PRIVATE_KEY,
 });
 
 //create package
@@ -184,7 +184,7 @@ export const deletePackage = async (req, res) => {
 
 //payment gateway api
 //token
-export const braintreeTokenController = async (req, res) => {
+export const braintreeeeeeTokenController = async (req, res) => {
   try {
     gateway.clientToken.generate({}, function (err, response) {
       if (err) {

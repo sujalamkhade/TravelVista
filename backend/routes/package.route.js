@@ -1,7 +1,7 @@
 import express from "express";
 import { isAdmin, requireSignIn } from "../middlewares/authMiddleware.js";
 import {
-  braintreeTokenController,
+  braintreeeeeeTokenController,
   createPackage,
   deletePackage,
   getPackageData,
@@ -28,6 +28,6 @@ router.get("/get-package-data/:id", getPackageData);
 
 //payments routes
 //token
-router.get("/braintree/token", braintreeTokenController);
+router.get("/braintreeeeee/token", braintreeeeeeTokenController);
 
 export default router;
