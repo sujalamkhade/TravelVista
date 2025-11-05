@@ -60,7 +60,7 @@ const packageSchema = new mongoose.Schema(
     },
     packageImages: {
       type: Array,
-      required: true,
+      // required: true,
     },
   },
   { timestamps: true }

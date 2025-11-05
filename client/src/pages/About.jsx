@@ -8,13 +8,13 @@ const About = () => {
         <h1 className="text-4xl text-center font-semibold">About</h1>
         <div className="w-max flex flex-col">
           <img src={aboutImg} className="w-40 h-40" alt="Image" />
-          <h1 className="text-xl font-semibold text-center">Sanjay NG</h1>
+          <h1 className="text-xl font-semibold text-center">Group No 18</h1>
         </div>
         <ul className="list-disc w-max mx-5">
           <li className="hover:underline hover:text-blue-600 cursor-pointer">
             <a
               className="flex items-center gap-2"
-              href="https://github.com/Sanjayng125"
+              href=""
               target="_blank"
             >
               Git-Hub <FaExternalLinkAlt />
@@ -23,7 +23,7 @@ const About = () => {
           <li className="hover:underline hover:text-blue-600 cursor-pointer">
             <a
               className="flex items-center gap-2"
-              href="https://linkedin.com/in/sanjay-ng-41b64922a"
+              href=""
               target="_blank"
             >
               LinkedIn <FaExternalLinkAlt />

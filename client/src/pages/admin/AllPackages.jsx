@@ -11,7 +11,7 @@ const AllPackages = () => {
   const getPackages = async () => {
     setPackages([]);
     try {
-      setLoading(true);
+      setLoading(true); 
       let url =
         filter === "offer" //offer
           ? `/api/package/get-packages?searchTerm=${search}&offer=true`
