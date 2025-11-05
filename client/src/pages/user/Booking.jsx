@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FaClock, FaMapMarkerAlt } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router";
-import DropIn from "braintreeeeee-web-drop-in-react";
+import DropIn from "braintree-web-drop-in-react";
 import axios from "axios";
 
 const Booking = () => {
@@ -77,7 +77,7 @@ const Booking = () => {
   //get paymentgateway token
   const getToken = async () => {
     try {
-      const { data } = await axios.get(`/api/package/braintreeeeee/token`);
+      const { data } = await axios.get(`/api/package/braintree/token`);
       setClientToken(data?.clientToken);
     } catch (error) {
       console.log(error);
