@@ -13,21 +13,28 @@ export const signupController = async (req, res) => {
     const { username, email, password, address, phone } = req.body;
 
     if (!username || !email || !password || !address || !phone) {
-      return res.status(200).send({
+      return res.status(400).send({
         success: false,
         message: "All fields are required!",
       });
     }
 
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res.status(200).send({
+    if (password.length < 8) {
+      return res.status(400).send({
         success: false,
-        message: "User already exists please login",
+        message: "Password must be at least 8 characters long!",
       });
     }
 
-    const hashedPassword = bcryptjs.hashSync(password, 10);
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).send({
+        success: false,
+        message: "User already exists, please login!",
+      });
+    }
+
+    const hashedPassword = await bcryptjs.hash(password, 10);
     const newUser = new User({
       username,
       email,
@@ -46,7 +53,7 @@ export const signupController = async (req, res) => {
     console.log(error);
     return res.status(500).send({
       success: false,
-      message: "Error is server!",
+      message: "Server Error!",
     });
   }
 };
