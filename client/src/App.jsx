@@ -14,6 +14,7 @@ import Package from "./pages/Package";
 import RatingsPage from "./pages/RatingsPage";
 import Booking from "./pages/user/Booking";
 import Search from "./pages/Search";
+import Footer from "./pages/components/Footer";
 
 const App = () => {
   return (
@@ -41,6 +42,7 @@ const App = () => {
           <Route path=":packageId" element={<Booking />} />
         </Route>
       </Routes>
+      <Footer />
     </BrowserRouter>
   );
 };
