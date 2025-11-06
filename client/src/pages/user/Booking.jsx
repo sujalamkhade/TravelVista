@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaClock, FaMapMarkerAlt } from "react-icons/fa";
+import { FaClock, FaMapMarkerAlt, FaUsers } from "react-icons/fa"; // Added FaUsers for persons
 import { useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router";
 import DropIn from "braintree-web-drop-in-react";
@@ -9,36 +9,44 @@ const Booking = () => {
   const { currentUser } = useSelector((state) => state.user);
   const params = useParams();
   const navigate = useNavigate();
+  
+  // Package State
   const [packageData, setPackageData] = useState({
     packageName: "",
     packageDescription: "",
     packageDestination: "",
     packageDays: 1,
     packageNights: 1,
-    packageAccommodation: "",
-    packageTransportation: "",
-    packageMeals: "",
-    packageActivities: "",
     packagePrice: 500,
     packageDiscountPrice: 0,
     packageOffer: false,
-    packageRating: 0,
-    packageTotalRatings: 0,
     packageImages: [],
   });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  
+  // Booking State
   const [bookingData, setBookingData] = useState({
     totalPrice: 0,
     packageDetails: null,
     buyer: null,
     persons: 1,
-    date: null,
+    date: "", // Changed to empty string to be explicit about required input
   });
+  
+  // Loading & Error States
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  
+  // Payment Gateway State
   const [clientToken, setClientToken] = useState("");
   const [instance, setInstance] = useState("");
   const [currentDate, setCurrentDate] = useState("");
 
+  // Helper to calculate price per person
+  const pricePerPerson = packageData.packageOffer
+    ? packageData.packageDiscountPrice
+    : packageData.packagePrice;
+    
+  // Fetch Package Data
   const getPackageData = async () => {
     try {
       setLoading(true);
@@ -53,15 +61,9 @@ const Booking = () => {
           packageDestination: data?.packageData?.packageDestination,
           packageDays: data?.packageData?.packageDays,
           packageNights: data?.packageData?.packageNights,
-          packageAccommodation: data?.packageData?.packageAccommodation,
-          packageTransportation: data?.packageData?.packageTransportation,
-          packageMeals: data?.packageData?.packageMeals,
-          packageActivities: data?.packageData?.packageActivities,
           packagePrice: data?.packageData?.packagePrice,
           packageDiscountPrice: data?.packageData?.packageDiscountPrice,
           packageOffer: data?.packageData?.packageOffer,
-          packageRating: data?.packageData?.packageRating,
-          packageTotalRatings: data?.packageData?.packageTotalRatings,
           packageImages: data?.packageData?.packageImages,
         });
         setLoading(false);
@@ -70,300 +72,332 @@ const Booking = () => {
         setLoading(false);
       }
     } catch (error) {
-      console.log(error);
+      console.error(error);
+      setError("Failed to fetch package data.");
+      setLoading(false);
     }
   };
 
-  //get paymentgateway token
+  // Get Payment Gateway Token
   const getToken = async () => {
     try {
       const { data } = await axios.get(`/api/package/braintree/token`);
       setClientToken(data?.clientToken);
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   };
+
   useEffect(() => {
     getToken();
-  }, [currentUser]);
+  }, []); // Run once on component mount
 
-  //handle payment & book package
+  // Handle Payment & Book Package
   const handleBookPackage = async () => {
-    if (
-      bookingData.packageDetails === "" ||
-      bookingData.buyer === "" ||
-      bookingData.totalPrice <= 0 ||
-      bookingData.persons <= 0 ||
-      bookingData.date === ""
-    ) {
-      alert("All fields are required!");
+    if (bookingData.persons <= 0 || !bookingData.date) {
+      alert("Please select a date and ensure persons is at least 1.");
       return;
     }
+    
+    // Payment specific handling (moved here for cleaner structure)
+    let nonce;
     try {
-      setLoading(true);
-      const res = await fetch(`/api/booking/book-package/${params?.id}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(bookingData),
-      });
-      const data = await res.json();
-      if (data?.success) {
-        setLoading(false);
-        alert(data?.message);
-        navigate(`/profile/${currentUser?.user_role === 1 ? "admin" : "user"}`);
-      } else {
-        setLoading(false);
-        alert(data?.message);
-      }
+        setLoading(true);
+        const { nonce: paymentNonce } = await instance.requestPaymentMethod();
+        nonce = paymentNonce;
     } catch (error) {
-      console.log(error);
-      setLoading(false);
+        console.error("Payment method request failed:", error);
+        alert("Payment method error. Please try again.");
+        setLoading(false);
+        return;
+    }
+    
+    try {
+        const res = await fetch(`/api/booking/book-package/${params?.packageId}`, { // Corrected URL structure assuming packageId is used
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                ...bookingData,
+                paymentMethodNonce: nonce, // Include nonce for transaction
+            }),
+        });
+        const data = await res.json();
+        
+        if (data?.success) {
+            alert(data?.message || "Booking successful!");
+            navigate(`/profile/${currentUser?.user_role === 1 ? "admin" : "user"}/bookings`); // Adjusted navigation path
+        } else {
+            alert(data?.message || "Booking failed. Please try again.");
+        }
+    } catch (error) {
+        console.error(error);
+        alert("An error occurred during booking.");
+    } finally {
+        setLoading(false);
     }
   };
 
+  // Fetch package data and set min date
   useEffect(() => {
     if (params?.packageId) {
       getPackageData();
     }
-    let date = new Date().toISOString().substring(0, 10);
-    let d = date.substring(0, 8) + (parseInt(date.substring(8)) + 1);
-    setCurrentDate(d);
+    // Set min date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setCurrentDate(tomorrow.toISOString().substring(0, 10));
   }, [params?.packageId]);
 
+  // Update booking data (total price, IDs) when packageData or persons change
   useEffect(() => {
     if (packageData && params?.packageId) {
-      setBookingData({
-        ...bookingData,
+      const calculatedPrice = pricePerPerson * bookingData.persons;
+      setBookingData((prev) => ({
+        ...prev,
         packageDetails: params?.packageId,
         buyer: currentUser?._id,
-        totalPrice: packageData?.packageDiscountPrice
-          ? packageData?.packageDiscountPrice * bookingData?.persons
-          : packageData?.packagePrice * bookingData?.persons,
-      });
+        totalPrice: calculatedPrice,
+      }));
     }
-  }, [packageData, params]);
+  }, [packageData, bookingData.persons, params, pricePerPerson, currentUser?._id]);
+
+
+  // Handle quantity change
+  const handleQuantityChange = (change) => {
+    setBookingData((prev) => {
+      const newPersons = Math.max(1, prev.persons + change); // Ensure min 1
+      if (newPersons > 10) return prev; // Limit max to 10
+      return {
+        ...prev,
+        persons: newPersons,
+      };
+    });
+  };
+
+
+  if (loading && packageData.packageName === "") {
+    return <div className="text-center p-10 text-xl font-medium">Loading package details...</div>;
+  }
+
+  if (error) {
+    return <div className="text-center p-10 text-xl font-medium text-red-600">Error: {error}</div>;
+  }
 
   return (
-    <div className="w-full flex flex-col items-center">
-      <div className="w-[95%] flex flex-col items-center p-6 rounded shadow-2xl gap-3">
-        <h1 className="text-center font-bold text-2xl">Book Package</h1>
-        {/* user info */}
-        <div className="w-full flex flex-wrap justify-center gap-2">
-          <div className="pr-3 md:border-r md:pr-6">
-            <div className="flex flex-col p-2 w-64 xsm:w-72 h-fit gap-2">
+    <div className="min-h-screen bg-gray-50 flex justify-center p-4 sm:p-6">
+      <div className="w-full max-w-4xl bg-white p-6 sm:p-10 rounded-xl shadow-xl space-y-8">
+        <h1 className="text-3xl font-extrabold text-indigo-800 text-center border-b pb-4">
+          Complete Your Booking ✈️
+        </h1>
+
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* User Information Section */}
+          <div className="md:border-r md:pr-8 space-y-6">
+            <h2 className="text-xl font-bold text-gray-700 border-b pb-2">
+              <FaUsers className="inline mr-2 text-indigo-500" /> Traveler Details
+            </h2>
+            <div className="space-y-4">
+              {/* Input: Username (Disabled) */}
               <div className="flex flex-col">
-                <label htmlFor="username" className="font-semibold">
+                <label htmlFor="username" className="text-sm font-medium text-gray-600">
                   Username:
                 </label>
                 <input
                   type="text"
                   id="username"
-                  className="p-1 rounded border border-black"
-                  value={currentUser.username}
+                  className="p-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed"
+                  value={currentUser?.username || "N/A"}
                   disabled
                 />
               </div>
+
+              {/* Input: Email (Disabled) */}
               <div className="flex flex-col">
-                <label htmlFor="email" className="font-semibold">
+                <label htmlFor="email" className="text-sm font-medium text-gray-600">
                   Email:
                 </label>
                 <input
                   type="email"
                   id="email"
-                  className="p-1 rounded border border-black"
-                  value={currentUser.email}
+                  className="p-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed"
+                  value={currentUser?.email || "N/A"}
                   disabled
                 />
               </div>
+
+              {/* Input: Address (Disabled) */}
               <div className="flex flex-col">
-                <label htmlFor="address" className="font-semibold">
-                  Address:
+                <label htmlFor="address" className="text-sm font-medium text-gray-600">
+                  Address: <span className="text-red-500 text-xs"> (Required for payment)</span>
                 </label>
                 <textarea
                   maxLength={200}
-                  type="text"
                   id="address"
-                  className="p-1 rounded border border-black resize-none"
-                  value={currentUser.address}
+                  className="p-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 resize-none cursor-not-allowed h-24"
+                  value={currentUser?.address || "Please update your profile address."}
                   disabled
                 />
               </div>
+              
+              {/* Input: Phone (Disabled) */}
               <div className="flex flex-col">
-                <label htmlFor="phone" className="font-semibold">
+                <label htmlFor="phone" className="text-sm font-medium text-gray-600">
                   Phone:
                 </label>
                 <input
                   type="text"
                   id="phone"
-                  className="p-1 rounded border border-black"
-                  value={currentUser.phone}
+                  className="p-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed"
+                  value={currentUser?.phone || "N/A"}
                   disabled
                 />
               </div>
             </div>
           </div>
-          {/* package info */}
-          <div className="pl-3 md:border-l md:pl-6">
-            <div className="flex flex-col gap-1">
-              <div className="flex flex-wrap gap-2">
-                <img
-                  className="w-28"
-                  src={packageData.packageImages[0]}
-                  alt="Package image"
-                />
-                <div>
-                  <p className="font-semibold text-lg mb-1 capitalize">
-                    {packageData.packageName}
+
+          {/* Package & Payment Section */}
+          <div className="space-y-6 md:pl-8">
+            <h2 className="text-xl font-bold text-gray-700 border-b pb-2">
+              <FaMapMarkerAlt className="inline mr-2 text-indigo-500" /> Package & Checkout
+            </h2>
+            
+            {/* Package Summary Card */}
+            <div className="bg-indigo-50 p-4 rounded-lg flex gap-4 items-center shadow-sm">
+              <img
+                className="w-20 h-20 object-cover rounded-md"
+                src={packageData.packageImages[0] || ""}
+                alt="Package"
+              />
+              <div className="flex flex-col">
+                <p className="font-bold text-lg capitalize text-indigo-700">
+                  {packageData.packageName}
+                </p>
+                <p className="flex items-center gap-1 text-sm text-gray-600 capitalize">
+                  <FaMapMarkerAlt className="text-indigo-400" /> {packageData.packageDestination}
+                </p>
+                {(+packageData.packageDays > 0 || +packageData.packageNights > 0) && (
+                  <p className="flex items-center gap-1 text-sm text-gray-600">
+                    <FaClock className="text-indigo-400" />
+                    {+packageData.packageDays > 0 &&
+                      `${packageData.packageDays} ${+packageData.packageDays > 1 ? "Days" : "Day"}`}
+                    {+packageData.packageDays > 0 && +packageData.packageNights > 0 && " - "}
+                    {+packageData.packageNights > 0 &&
+                      `${packageData.packageNights} ${+packageData.packageNights > 1 ? "Nights" : "Night"}`}
                   </p>
-                  <p className="flex gap-2 text-green-700 font-semibold capitalize">
-                    <FaMapMarkerAlt /> {packageData.packageDestination}
-                  </p>
-                  {/* days & nights */}
-                  {(+packageData.packageDays > 0 ||
-                    +packageData.packageNights > 0) && (
-                    <p className="flex items-center gap-2">
-                      <FaClock />
-                      {+packageData.packageDays > 0 &&
-                        (+packageData.packageDays > 1
-                          ? packageData.packageDays + " Days"
-                          : packageData.packageDays + " Day")}
-                      {+packageData.packageDays > 0 &&
-                        +packageData.packageNights > 0 &&
-                        " - "}
-                      {+packageData.packageNights > 0 &&
-                        (+packageData.packageNights > 1
-                          ? packageData.packageNights + " Nights"
-                          : packageData.packageNights + " Night")}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col my-1">
-                <label className="font-semibold" htmlFor="date">
-                  Select Date:
-                </label>
-                <input
-                  type="date"
-                  min={currentDate !== "" ? currentDate : ""}
-                  //   min={"2024-01-23"}
-                  id="date"
-                  className="w-max border rounded"
-                  onChange={(e) => {
-                    setBookingData({ ...bookingData, date: e.target.value });
-                  }}
-                />
-              </div>
-              {/* price */}
-              <p className="flex gap-1 text-xl font-semibold my-1">
-                Price:
-                {packageData.packageOffer ? (
-                  <>
-                    <span className="line-through text-gray-700">
-                      ${packageData.packagePrice}
-                    </span>{" "}
-                    -<span>${packageData.packageDiscountPrice}</span>
-                    <span className="text-lg ml-2 bg-green-700 p-1 rounded text-white">
-                      {Math.floor(
-                        ((+packageData.packagePrice -
-                          +packageData.packageDiscountPrice) /
-                          +packageData.packagePrice) *
-                          100
-                      )}
-                      % Off
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-green-700">
-                    ${packageData.packagePrice}
-                  </span>
                 )}
-              </p>
-              {/* price */}
-              <div className="flex border-2 w-max">
-                <button
-                  className="p-2 py-1 font-semibold"
-                  onClick={() => {
-                    if (bookingData.persons > 1) {
-                      setBookingData({
-                        ...bookingData,
-                        persons: (bookingData.persons -= 1),
-                        totalPrice: packageData.packageDiscountPrice
-                          ? packageData.packageDiscountPrice *
-                            bookingData.persons
-                          : packageData.packagePrice * bookingData.persons,
-                      });
-                    }
-                  }}
-                >
-                  -
-                </button>
-                <input
-                  value={bookingData.persons}
-                  disabled
-                  type="text"
-                  className="border w-10 text-center text-lg"
-                />
-                <button
-                  className="p-2 py-1 font-semibold"
-                  onClick={() => {
-                    if (bookingData.persons < 10) {
-                      setBookingData({
-                        ...bookingData,
-                        persons: (bookingData.persons += 1),
-                        totalPrice: packageData.packageDiscountPrice
-                          ? packageData.packageDiscountPrice *
-                            bookingData.persons
-                          : packageData.packagePrice * bookingData.persons,
-                      });
-                    }
-                  }}
-                >
-                  +
-                </button>
               </div>
-              <p className="text-xl font-semibold">
-                Total Price:
-                <span className="text-green-700">
-                  $
-                  {packageData.packageDiscountPrice
-                    ? packageData.packageDiscountPrice * bookingData.persons
-                    : packageData.packagePrice * bookingData.persons}
+            </div>
+
+            {/* Date Selection */}
+            <div className="flex flex-col">
+              <label className="text-sm font-medium text-gray-600 mb-1" htmlFor="date">
+                Departure Date: <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                min={currentDate}
+                id="date"
+                className="p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                onChange={(e) => {
+                  setBookingData({ ...bookingData, date: e.target.value });
+                }}
+              />
+            </div>
+            
+            {/* Persons Counter */}
+            <div className="flex items-center justify-between p-3 border border-gray-300 rounded-lg">
+                <label className="font-semibold text-gray-700">Persons (Max 10):</label>
+                <div className="flex items-center space-x-2">
+                    <button
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded-md transition duration-150 disabled:bg-indigo-300"
+                        onClick={() => handleQuantityChange(-1)}
+                        disabled={bookingData.persons <= 1}
+                    >
+                        -
+                    </button>
+                    <span className="text-lg font-bold w-6 text-center">{bookingData.persons}</span>
+                    <button
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded-md transition duration-150 disabled:bg-indigo-300"
+                        onClick={() => handleQuantityChange(1)}
+                        disabled={bookingData.persons >= 10}
+                    >
+                        +
+                    </button>
+                </div>
+            </div>
+
+            {/* Pricing Summary */}
+            <div className="space-y-2 border-t pt-4">
+              <p className="flex justify-between text-base font-medium text-gray-600">
+                Price per Person:
+                <span className="font-semibold text-gray-800">
+                  {packageData.packageOffer ? (
+                    <>
+                      <span className="line-through text-red-500 mr-2">${packageData.packagePrice}</span>
+                      <span className="text-green-600">${pricePerPerson}</span>
+                    </>
+                  ) : (
+                    <span className="text-green-600">${pricePerPerson}</span>
+                  )}
                 </span>
               </p>
-              <div className="my-2 max-w-[300px] gap-1">
-                <p
-                  className={`font-semibold ${
-                    instance && "text-red-700 text-sm"
-                  }`}
-                >
-                  Payment:
-                  {!instance
-                    ? "Loading..."
-                    : "Don't use your original card details!(This is not the production build)"}
-                </p>
-                {clientToken && (
-                  <>
-                    <DropIn
-                      options={{
-                        authorization: clientToken,
-                        paypal: {
-                          flow: "vault",
-                        },
-                      }}
-                      onInstance={(instance) => setInstance(instance)}
-                    />
-                    <button
-                      className="p-2 rounded bg-blue-600 text-white payment-btn disabled:optional:80 hover:opacity-95 cursor-pointer"
-                      onClick={handleBookPackage}
-                      disabled={loading || !instance || !currentUser?.address}
-                    >
-                      {loading ? "Processing..." : "Book Now"}
-                    </button>
-                  </>
+              
+              <p className="flex justify-between text-2xl font-extrabold text-gray-800">
+                Total Price:
+                <span className="text-indigo-600">
+                  ${bookingData.totalPrice.toFixed(2)}
+                </span>
+              </p>
+            </div>
+
+            {/* Payment Integration (Braintree Drop-In) */}
+            <div className="pt-4 space-y-3">
+                <p className="font-semibold text-gray-700">Payment Information:</p>
+                
+                {clientToken ? (
+                    <>
+                      <div className="border p-4 rounded-lg shadow-inner">
+                        <DropIn
+                          options={{
+                            authorization: clientToken,
+                            paypal: { flow: "vault" },
+                          }}
+                          onInstance={(instance) => setInstance(instance)}
+                        />
+                      </div>
+                      <p className="text-sm font-medium text-red-600">
+                        **Demo Mode:** Do not use original card details! This is a test environment.
+                      </p>
+
+                      <button
+                        className="w-full p-3 rounded-lg bg-indigo-600 text-white font-bold text-lg transition duration-300 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        onClick={handleBookPackage}
+                        disabled={loading || !instance || !currentUser?.address || !bookingData.date}
+                      >
+                        {loading ? (
+                          <>
+                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Processing...
+                          </>
+                        ) : (
+                          "Book Now"
+                        )}
+                      </button>
+                      
+                      {(!currentUser?.address) && (
+                          <p className="text-sm text-red-500 mt-2 text-center font-medium">
+                            Please provide your address in your profile to enable booking.
+                          </p>
+                      )}
+                    </>
+                ) : (
+                    <div className="text-center text-gray-500 p-4 border rounded-lg">Loading payment options...</div>
                 )}
-              </div>
             </div>
           </div>
         </div>
